@@ -1,0 +1,158 @@
+---
+title: "wordle.qmd"
+format: html
+editor: visual
+---
+
+```{r}
+library(tidyverse)
+```
+
+## create custom function and variables
+
+```{r}
+load_dictionary <- function(filename) {
+  dictionary <- read_csv(filename, col_names = TRUE)
+  words <- dictionary[["words"]]
+  words <- toupper(words)
+  return(words)
+}
+
+valid_list <- load_dictionary("collins-scrabble-words-2019.txt")
+solution_list <- load_dictionary("google-10000-english-usa-no-swears.txt")
+
+str(valid_list)
+str(solution_list)
+```
+
+## winnow variable solution_list
+
+```{r}
+solution_list <- intersect(solution_list, valid_list)
+str(solution_list)
+length(solution_list) # number of words in updated solution_list
+```
+
+## pick solution
+
+```{r}
+pick_solution <- function(solution_list) {
+  remove_words <- solution_list[nchar(solution_list) == 5]
+  chosen_word <- sample(remove_words, 1)
+  letters_vector <- strsplit(chosen_word, "")[[1]]
+  return(letters_vector)
+}
+
+solution <- pick_solution(solution_list)
+solution
+```
+
+## play wordle and evaluate guess
+
+```{R}
+play_wordle <- function(solution, valid_list, num_guesses = 6) {
+  
+  solution <- toupper(solution)
+  valid_list <- toupper(valid_list)
+  word_length <- length(solution) 
+  
+  print(paste0("You have", num_guesses,
+               "chances to guess a word of length",
+               word_length))
+  
+  # print feedback legand
+  cat("\nFeedback symbols:\n")
+  cat("*  = correct letter in correct position\n")
+  cat("+  = correct letter in wrong position\n")
+  cat("-  = letter not in word\n\n")
+  
+  letters_left <- LETTERS # show unused letters
+  guess_history <- character(num_guesses) # store guesses
+  feedback_history <- character(num_guesses) # store feedback strings
+  
+  for (i in 1:num_guesses) {
+    print(paste0("Letters left: ", paste(letters_left, collapse = " "))) # show remainding letters
+    guess <- readline(paste0("Enter guess ", i, ": ")) |> toupper() # read and confirm input
+    
+  while (nchar(guess) != word_length) {
+      guess <- readline(paste0("Guess must have", word_length, "characters. Enter guess",
+                               i, " again: ")) |>
+        toupper()
+    }
+    
+   while (!(guess %in% valid_list)) {
+      guess <- readline(paste0("Word not in dictionary. Enter guess ", i, " again: ")) |>
+        toupper()
+    }
+    
+    guess_vector <- str_split(guess, "")[[1]] # convert guess to vector
+    
+    feedback <- evaluate_guess(guess_vector, solution) # call evaluate_guess function
+    
+    letters_left <- setdiff(letters_left, guess_vector) # remove guessed letters
+    
+    # store history and print guess feedback
+    guess_history[i] <- guess
+    feedback_history[i] <- paste(feedback, collapse = "")
+    print(paste0(guess, " : ", paste(feedback, collapse = "")))
+    
+   if (all(feedback == "*")) {
+      print(paste0("You won in ", i, " guesses!"))
+      
+      history <- data.frame(Guess = guess_history[1:i], Feedback = feedback_history[1:i])
+      print(history)
+      return(invisible(history))
+    }
+  }
+  print(paste0("Sorry, you lost! Solution was ", paste(solution, collapse = "")))
+  
+  history <- data.frame(Guess = guess_history, Feedback = feedback_history)
+  print(history)
+  return(invisible(history))
+}
+
+#evaluate guess
+evaluate_guess <- function(guess, solution) {
+  word_length <- length(solution)
+  feedback <- rep("-", word_length)
+  
+  guess_count <- tibble(letter = guess) |>
+    group_by(letter) |>
+    summarize(n_in_guess = n())
+  
+  solution_count <- tibble(letter = solution) |>
+    group_by(letter) |>
+    summarize(n_in_solution = n())
+  
+  counts <- inner_join(guess_count, solution_count, by = "letter") |>
+    mutate(to_clear = n_in_guess - n_in_solution) |>
+    filter(to_clear > 0) |>
+    select(letter, to_clear)
+  
+  for (i in 1:word_length) {
+    
+    feedback[i] <- case_when(
+      guess[i] == solution[i] ~ "*",
+      guess[i] %in% solution ~ "+",
+      TRUE ~ "-"
+    )
+    
+  for (j in counts$letter) {
+      if (guess[i] == j & feedback[i] != "*" &
+          counts[counts$letter == j, ]$to_clear > 0) {
+        feedback[i] <- "-"
+        counts[counts$letter == j, ]$to_clear <-
+          counts[counts$letter == j, ]$to_clear - 1
+      }
+    }
+  }
+  
+  return(feedback)
+}
+```
+
+## play wordle
+
+```{r}
+play_wordle(solution, valid_list, num_guesses = 6)
+```
