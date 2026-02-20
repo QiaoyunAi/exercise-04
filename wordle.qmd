@@ -1,7 +1,7 @@
 ---
 title: "wordle.qmd"
 format: html
-editor: visual
+authors: Qiaoyun Ai & Clarissa Aguilar
 ---
 
 ```{r}
@@ -49,9 +49,8 @@ solution
 
 ## play wordle and evaluate guess
 
-```{R}
+```{r}
 play_wordle <- function(solution, valid_list, num_guesses = 6) {
-  
   solution <- toupper(solution)
   valid_list <- toupper(valid_list)
   word_length <- length(solution) 
@@ -74,28 +73,29 @@ play_wordle <- function(solution, valid_list, num_guesses = 6) {
     print(paste0("Letters left: ", paste(letters_left, collapse = " "))) # show remainding letters
     guess <- readline(paste0("Enter guess ", i, ": ")) |> toupper() # read and confirm input
     
+  # ensure guess has correct length
   while (nchar(guess) != word_length) {
       guess <- readline(paste0("Guess must have", word_length, "characters. Enter guess",
                                i, " again: ")) |>
         toupper()
     }
-    
-   while (!(guess %in% valid_list)) {
+  
+  # ensure guess exit in dictionary  
+  while (!(guess %in% valid_list)) {
       guess <- readline(paste0("Word not in dictionary. Enter guess ", i, " again: ")) |>
         toupper()
     }
     
-    guess_vector <- str_split(guess, "")[[1]] # convert guess to vector
-    
+    guess_vector <- str_split(guess, "")[[1]] # convert guess string to vector
     feedback <- evaluate_guess(guess_vector, solution) # call evaluate_guess function
-    
     letters_left <- setdiff(letters_left, guess_vector) # remove guessed letters
     
     # store history and print guess feedback
     guess_history[i] <- guess
     feedback_history[i] <- paste(feedback, collapse = "")
     print(paste0(guess, " : ", paste(feedback, collapse = "")))
-    
+   
+   # player wins
    if (all(feedback == "*")) {
       print(paste0("You won in ", i, " guesses!"))
       
@@ -104,6 +104,8 @@ play_wordle <- function(solution, valid_list, num_guesses = 6) {
       return(invisible(history))
     }
   }
+  
+  #player loses
   print(paste0("Sorry, you lost! Solution was ", paste(solution, collapse = "")))
   
   history <- data.frame(Guess = guess_history, Feedback = feedback_history)
@@ -116,27 +118,31 @@ evaluate_guess <- function(guess, solution) {
   word_length <- length(solution)
   feedback <- rep("-", word_length)
   
+  # count occurrences of letters in guess
   guess_count <- tibble(letter = guess) |>
     group_by(letter) |>
     summarize(n_in_guess = n())
   
+  # count occurrences of letters in solution
   solution_count <- tibble(letter = solution) |>
     group_by(letter) |>
     summarize(n_in_solution = n())
   
+  # identify letters that appear more times in guess than solution
   counts <- inner_join(guess_count, solution_count, by = "letter") |>
     mutate(to_clear = n_in_guess - n_in_solution) |>
     filter(to_clear > 0) |>
     select(letter, to_clear)
   
+  # compare each letter position
   for (i in 1:word_length) {
-    
     feedback[i] <- case_when(
       guess[i] == solution[i] ~ "*",
       guess[i] %in% solution ~ "+",
       TRUE ~ "-"
     )
-    
+  
+  # adjust over-counted letters  
   for (j in counts$letter) {
       if (guess[i] == j & feedback[i] != "*" &
           counts[counts$letter == j, ]$to_clear > 0) {
@@ -153,6 +159,6 @@ evaluate_guess <- function(guess, solution) {
 
 ## play wordle
 
-```{r}
+```{r, eval=FALSE}
 play_wordle(solution, valid_list, num_guesses = 6)
 ```
